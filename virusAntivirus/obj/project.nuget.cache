@@ -1,10 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "NJwla/p+uzI=",
+  "dgSpecHash": "ZU5ANvkwAIE=",
   "success": true,
   "projectFilePath": "/Users/enisuzun/C#/virusAntivirus/virusAntivirus/virusAntivirus.csproj",
   "expectedPackageFiles": [
-    "/Users/enisuzun/.nuget/packages/microsoft.windowsdesktop.app.ref/10.0.0/microsoft.windowsdesktop.app.ref.10.0.0.nupkg.sha512"
+    "/Users/enisuzun/.nuget/packages/microsoft.windowsdesktop.app.ref/9.0.11/microsoft.windowsdesktop.app.ref.9.0.11.nupkg.sha512"
   ],
   "logs": []
 }
