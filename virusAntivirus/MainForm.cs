@@ -1,5 +1,7 @@
 using System.Windows.Forms;
 using System.Drawing;
+using VirusAntivirusSimulator.Services;
+using VirusAntivirusSimulator.Models;
 
 namespace VirusAntivirusSimulator;
 
@@ -10,9 +12,9 @@ namespace VirusAntivirusSimulator;
 /// </summary>
 public partial class MainForm : Form
 {
-    // Simüle edilen virüs imzası - antivirüs taramasında aranacak
-    private const string VIRUS_SIGNATURE = "SIMULATED_VIRUS_SIGNATURE";
-    private const string VIRUS_FILENAME = "fake_virus.txt";
+    // Servisler
+    private readonly VirusSimulator _virusSimulator;
+    private readonly AntivirusScanner _antivirusScanner;
 
     // UI Kontrolleri - Virüs Paneli
     private GroupBox grpVirus = null!;
@@ -36,6 +38,8 @@ public partial class MainForm : Form
 
     public MainForm()
     {
+        _virusSimulator = new VirusSimulator();
+        _antivirusScanner = new AntivirusScanner(_virusSimulator.VirusSignature);
         InitializeComponent();
     }
 
@@ -272,14 +276,13 @@ public partial class MainForm : Form
     /// </summary>
     private void BtnInfect_Click(object? sender, EventArgs e)
     {
-        string targetPath = Path.Combine(txtVirusFolder.Text, VIRUS_FILENAME);
+        var (success, message, filePath) = _virusSimulator.CreateFakeVirus(txtVirusFolder.Text);
 
-        // Dosya zaten varsa tekrar oluşturma
-        if (File.Exists(targetPath))
+        if (!success)
         {
-            Log($"⚠️ Dosya zaten mevcut: {VIRUS_FILENAME}");
+            Log($"⚠️ {message}");
             MessageBox.Show(
-                $"'{VIRUS_FILENAME}' dosyası bu klasörde zaten mevcut!",
+                message,
                 "Bilgi",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information
@@ -287,47 +290,16 @@ public partial class MainForm : Form
             return;
         }
 
-        try
-        {
-            // Simüle edilmiş virüs dosyasını oluştur
-            // İçeriğe virüs imzasını yaz
-            string content = $"""
-                ═══════════════════════════════════════════════════════════
-                Bu dosya bir EĞİTİM SİMÜLASYONUDUR.
-                Gerçek bir virüs DEĞİLDİR ve zararsızdır.
-                ═══════════════════════════════════════════════════════════
-                
-                Virüs İmzası: {VIRUS_SIGNATURE}
-                
-                Oluşturulma Tarihi: {DateTime.Now}
-                
-                Bu imza antivirüs tarayıcısı tarafından tespit edilecektir.
-                ═══════════════════════════════════════════════════════════
-                """;
+        Log($"✅ Simüle edilmiş virüs dosyası oluşturuldu: {filePath}");
+        Log($"   İmza: {_virusSimulator.VirusSignature}");
 
-            File.WriteAllText(targetPath, content);
-
-            Log($"✅ Simüle edilmiş virüs dosyası oluşturuldu: {targetPath}");
-            Log($"   İmza: {VIRUS_SIGNATURE}");
-
-            MessageBox.Show(
-                $"'{VIRUS_FILENAME}' dosyası başarıyla oluşturuldu!\n\n" +
-                "Şimdi antivirüs panelinden bu klasörü tarayabilirsiniz.",
-                "Başarılı",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information
-            );
-        }
-        catch (Exception ex)
-        {
-            Log($"❌ Hata oluştu: {ex.Message}");
-            MessageBox.Show(
-                $"Dosya oluşturulurken hata: {ex.Message}",
-                "Hata",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error
-            );
-        }
+        MessageBox.Show(
+            $"'{_virusSimulator.VirusFileName}' dosyası başarıyla oluşturuldu!\n\n" +
+            "Şimdi antivirüs panelinden bu klasörü tarayabilirsiniz.",
+            "Başarılı",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information
+        );
     }
 
     /// <summary>
@@ -345,10 +317,10 @@ public partial class MainForm : Form
 
         try
         {
-            // Klasördeki tüm .txt dosyalarını al
-            string[] txtFiles = Directory.GetFiles(scanPath, "*.txt", SearchOption.TopDirectoryOnly);
+            // Servis ile tarama yap
+            var results = _antivirusScanner.ScanFolder(scanPath);
 
-            if (txtFiles.Length == 0)
+            if (results.Count == 0)
             {
                 Log("   Hiçbir .txt dosyası bulunamadı.");
                 MessageBox.Show(
@@ -363,34 +335,19 @@ public partial class MainForm : Form
             int threatCount = 0;
             int cleanCount = 0;
 
-            foreach (string filePath in txtFiles)
+            foreach (var result in results)
             {
-                string fileName = Path.GetFileName(filePath);
-                bool isThreat = false;
-
-                try
-                {
-                    // Dosya içeriğini oku ve virüs imzasını ara
-                    string content = File.ReadAllText(filePath);
-                    isThreat = content.Contains(VIRUS_SIGNATURE);
-                }
-                catch
-                {
-                    // Dosya okunamazsa temiz olarak işaretle
-                    isThreat = false;
-                }
-
                 // Sonucu ListView'a ekle
-                var item = new ListViewItem(fileName);
-                item.SubItems.Add(filePath);
+                var item = new ListViewItem(result.FileName);
+                item.SubItems.Add(result.FilePath);
 
-                if (isThreat)
+                if (result.IsThreat)
                 {
                     item.SubItems.Add("🚨 Tehdit Bulundu!");
                     item.BackColor = Color.FromArgb(255, 200, 200);
                     item.ForeColor = Color.DarkRed;
                     threatCount++;
-                    Log($"   🚨 TEHDİT: {fileName}");
+                    Log($"   🚨 TEHDİT: {result.FileName}");
                 }
                 else
                 {
@@ -398,26 +355,26 @@ public partial class MainForm : Form
                     item.BackColor = Color.FromArgb(200, 255, 200);
                     item.ForeColor = Color.DarkGreen;
                     cleanCount++;
-                    Log($"   ✅ Temiz: {fileName}");
+                    Log($"   ✅ Temiz: {result.FileName}");
                 }
 
                 // Tag'a tehdit durumunu kaydet (silme işlemi için)
-                item.Tag = isThreat;
+                item.Tag = result.IsThreat;
                 lvResults.Items.Add(item);
             }
 
             Log($"═══════════════════════════════════════════════════════════");
-            Log($"📊 Tarama tamamlandı: {txtFiles.Length} dosya tarandı");
+            Log($"📊 Tarama tamamlandı: {results.Count} dosya tarandı");
             Log($"   🚨 Tehdit: {threatCount} | ✅ Temiz: {cleanCount}");
 
             string resultMessage = threatCount > 0
                 ? $"Tarama tamamlandı!\n\n" +
-                  $"Taranan: {txtFiles.Length} dosya\n" +
+                  $"Taranan: {results.Count} dosya\n" +
                   $"Tehdit: {threatCount}\n" +
                   $"Temiz: {cleanCount}\n\n" +
                   "Tehditleri silmek için listeden seçip 'Sil' butonuna tıklayın."
                 : $"Tarama tamamlandı!\n\n" +
-                  $"Taranan: {txtFiles.Length} dosya\n" +
+                  $"Taranan: {results.Count} dosya\n" +
                   "Hiçbir tehdit bulunamadı! ✅";
 
             MessageBox.Show(
